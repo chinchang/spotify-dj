@@ -30,12 +30,16 @@ function getSavedClip() {
 }
 
 function getSavedOffset() {
-  const v = Number(localStorage.getItem(OFFSET_KEY));
+  const raw = localStorage.getItem(OFFSET_KEY);
+  if (raw === null) return 30;
+  const v = Number(raw);
   return Number.isFinite(v) && v >= 0 ? clamp(v, OFFSET_MIN, OFFSET_MAX) : 30;
 }
 
 function getSavedFade() {
-  const v = Number(localStorage.getItem(FADE_KEY));
+  const raw = localStorage.getItem(FADE_KEY);
+  if (raw === null) return 1.5;
+  const v = Number(raw);
   return Number.isFinite(v) && v >= 0 ? clamp(v, FADE_MIN, FADE_MAX) : 1.5;
 }
 
@@ -315,39 +319,50 @@ function renderPlayer(meta, _curTrack, _next, tracks) {
     el.style.setProperty('--val', `${pct}%`);
   }
 
-  const clipEl = $('#clip');
-  const clipVal = $('#clip-val');
-  const updateClip = () => {
-    clipVal.textContent = fmtTime(Number(clipEl.value));
-    dj.setClipSeconds(Number(clipEl.value));
-    localStorage.setItem(CLIP_KEY, clipEl.value);
-    paintSliderFill(clipEl);
-  };
-  clipEl.addEventListener('input', updateClip);
-  updateClip();
+  function wireSlider({ el, valEl, key, format, onChange }) {
+    // Force the DOM value to match the saved/default we resolved in JS, in case
+    // the browser's range-input parsing clamped or ignored the inline `value`
+    // attribute for any reason.
+    const wireInitial = (initial) => {
+      el.value = String(initial);
+      valEl.textContent = format(Number(el.value));
+      onChange(Number(el.value));
+      paintSliderFill(el);
+    };
+    const onInput = () => {
+      const v = Number(el.value);
+      valEl.textContent = format(v);
+      onChange(v);
+      localStorage.setItem(key, el.value);
+      paintSliderFill(el);
+    };
+    el.addEventListener('input', onInput);
+    return wireInitial;
+  }
 
-  const offsetEl = $('#offset');
-  const offsetVal = $('#offset-val');
-  const updateOffset = () => {
-    offsetVal.textContent = fmtTime(Number(offsetEl.value));
-    dj.setOffsetSeconds(Number(offsetEl.value));
-    localStorage.setItem(OFFSET_KEY, offsetEl.value);
-    paintSliderFill(offsetEl);
-  };
-  offsetEl.addEventListener('input', updateOffset);
-  updateOffset();
+  wireSlider({
+    el: $('#clip'),
+    valEl: $('#clip-val'),
+    key: CLIP_KEY,
+    format: fmtTime,
+    onChange: (v) => dj.setClipSeconds(v),
+  })(clip);
 
-  const fadeEl = $('#fade');
-  const fadeVal = $('#fade-val');
-  const updateFade = () => {
-    const sec = Number(fadeEl.value);
-    fadeVal.textContent = sec.toFixed(1) + 's';
-    dj.setFadeMs(sec * 1000);
-    localStorage.setItem(FADE_KEY, fadeEl.value);
-    paintSliderFill(fadeEl);
-  };
-  fadeEl.addEventListener('input', updateFade);
-  updateFade();
+  wireSlider({
+    el: $('#offset'),
+    valEl: $('#offset-val'),
+    key: OFFSET_KEY,
+    format: fmtTime,
+    onChange: (v) => dj.setOffsetSeconds(v),
+  })(offset);
+
+  wireSlider({
+    el: $('#fade'),
+    valEl: $('#fade-val'),
+    key: FADE_KEY,
+    format: (v) => v.toFixed(1) + 's',
+    onChange: (v) => dj.setFadeMs(v * 1000),
+  })(fade);
 
   // Loop toggle
   const loopBtn = $('#loop-btn');
