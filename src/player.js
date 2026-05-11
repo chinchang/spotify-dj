@@ -1,7 +1,7 @@
-import { getAccessToken } from './auth.js';
-import * as api from './api.js';
+import { getAccessToken } from "./auth.js";
+import * as api from "./api.js";
 
-const SDK_SRC = 'https://sdk.scdn.co/spotify-player.js';
+const SDK_SRC = "https://sdk.scdn.co/spotify-player.js";
 const FADE_MS = 1500;
 
 let sdkReadyPromise = null;
@@ -10,10 +10,11 @@ function loadSdk() {
   sdkReadyPromise = new Promise((resolve, reject) => {
     if (window.Spotify) return resolve(window.Spotify);
     window.onSpotifyWebPlaybackSDKReady = () => resolve(window.Spotify);
-    const s = document.createElement('script');
+    const s = document.createElement("script");
     s.src = SDK_SRC;
     s.async = true;
-    s.onerror = () => reject(new Error('Failed to load Spotify Web Playback SDK.'));
+    s.onerror = () =>
+      reject(new Error("Failed to load Spotify Web Playback SDK."));
     document.head.appendChild(s);
   });
   return sdkReadyPromise;
@@ -28,7 +29,12 @@ function fadeVolume(player, from, to, durationMs) {
   player.setVolume(Math.max(0, Math.min(1, from))).catch(() => {});
   if (durationMs <= 0) {
     player.setVolume(Math.max(0, Math.min(1, to))).catch(() => {});
-    return { promise: Promise.resolve(), cancel() { cancelled = true; } };
+    return {
+      promise: Promise.resolve(),
+      cancel() {
+        cancelled = true;
+      },
+    };
   }
   const start = performance.now();
   const promise = new Promise((resolve) => {
@@ -73,7 +79,7 @@ export class DJ {
     this.deviceId = null;
     this.tracks = [];
     this.index = 0;
-    this.state = 'IDLE';
+    this.state = "IDLE";
     this.clipMs = 30_000;
     this.offsetMs = 0;
     this.fadeMs = FADE_MS;
@@ -150,30 +156,39 @@ export class DJ {
     if (this._connected) return;
     const Spotify = await loadSdk();
     this.player = new Spotify.Player({
-      name: 'Auto DJ',
+      name: "Auto DJ",
       getOAuthToken: (cb) => {
-        getAccessToken().then(cb).catch((e) => this.onError(e));
+        getAccessToken()
+          .then(cb)
+          .catch((e) => this.onError(e));
       },
       volume: 1.0,
     });
 
-    this.player.addListener('initialization_error', ({ message }) =>
-      this.onError(new Error(`SDK init: ${message}`))
+    this.player.addListener("initialization_error", ({ message }) =>
+      this.onError(new Error(`SDK init: ${message}`)),
     );
-    this.player.addListener('authentication_error', ({ message }) =>
-      this.onError(new Error(`SDK auth: ${message}`))
+    this.player.addListener("authentication_error", ({ message }) =>
+      this.onError(new Error(`SDK auth: ${message}`)),
     );
-    this.player.addListener('account_error', () =>
-      this.onError(new Error('Spotify Premium is required to use the Web Playback SDK.'))
+    this.player.addListener("account_error", () =>
+      this.onError(
+        new Error("Spotify Premium is required to use the Web Playback SDK."),
+      ),
     );
-    this.player.addListener('playback_error', ({ message }) =>
-      this.onError(new Error(`Playback: ${message}`))
+    this.player.addListener("playback_error", ({ message }) =>
+      this.onError(new Error(`Playback: ${message}`)),
     );
 
-    this.player.addListener('player_state_changed', (state) => {
+    this.player.addListener("player_state_changed", (state) => {
       if (!state) return;
       const cur = state.track_window?.current_track;
-      if (this._waitForUri && cur && cur.uri === this._waitForUri.uri && !state.paused) {
+      if (
+        this._waitForUri &&
+        cur &&
+        cur.uri === this._waitForUri.uri &&
+        !state.paused
+      ) {
         const w = this._waitForUri;
         this._waitForUri = null;
         w.resolve();
@@ -181,18 +196,18 @@ export class DJ {
     });
 
     const ready = new Promise((resolve, reject) => {
-      this.player.addListener('ready', ({ device_id }) => {
+      this.player.addListener("ready", ({ device_id }) => {
         this.deviceId = device_id;
         resolve();
       });
-      this.player.addListener('not_ready', ({ device_id }) => {
-        console.warn('Device went offline:', device_id);
+      this.player.addListener("not_ready", ({ device_id }) => {
+        console.warn("Device went offline:", device_id);
       });
-      setTimeout(() => reject(new Error('SDK ready timeout (15s).')), 15_000);
+      setTimeout(() => reject(new Error("SDK ready timeout (15s).")), 15_000);
     });
 
     const ok = await this.player.connect();
-    if (!ok) throw new Error('player.connect() returned false.');
+    if (!ok) throw new Error("player.connect() returned false.");
     await ready;
     await api.transferPlayback(this.deviceId, false);
     this._connected = true;
@@ -202,7 +217,7 @@ export class DJ {
     this._cancelTimers();
     this.tracks = tracks.filter((t) => t && t.uri);
     if (!this.tracks.length) {
-      this.onError(new Error('Playlist is empty.'));
+      this.onError(new Error("Playlist is empty."));
       return;
     }
     this.index = Math.max(0, Math.min(startIndex, this.tracks.length - 1));
@@ -214,7 +229,7 @@ export class DJ {
     if (callerGen !== undefined && !this._isCurrentGen(callerGen)) return;
     this._consecutiveFails = (this._consecutiveFails || 0) + 1;
     if (this._consecutiveFails >= this.tracks.length) {
-      console.warn('All tracks failed to play, stopping.', reason);
+      console.warn("All tracks failed to play, stopping.", reason);
       return this._stop();
     }
     this.index += 1;
@@ -226,7 +241,7 @@ export class DJ {
   }
 
   async skip() {
-    if (this.state === 'IDLE') return;
+    if (this.state === "IDLE") return;
     this._cancelTimers();
     this.index += 1;
     if (this.index >= this.tracks.length) {
@@ -241,10 +256,10 @@ export class DJ {
   }
 
   async pause() {
-    this._bumpGen();           // invalidate any in-flight load / fade-out
+    this._bumpGen(); // invalidate any in-flight load / fade-out
     this._cancelTimers();
     if (this.player) await this.player.pause().catch(() => {});
-    this.setState('PAUSED');
+    this.setState("PAUSED");
   }
 
   async resume() {
@@ -252,7 +267,7 @@ export class DJ {
     // Volume might be at a partial value if we were interrupted mid-fade.
     await this.player.setVolume(1).catch(() => {});
     await this.player.resume().catch(() => {});
-    this.setState('PLAYING');
+    this.setState("PLAYING");
     this._scheduleFadeOut();
   }
 
@@ -261,7 +276,7 @@ export class DJ {
     this._cancelTimers();
     this._stopProgressPolling();
     if (this.player) await this.player.pause().catch(() => {});
-    this.setState('IDLE');
+    this.setState("IDLE");
   }
 
   _cancelTimers() {
@@ -276,7 +291,7 @@ export class DJ {
     if (this._waitForUri) {
       const w = this._waitForUri;
       this._waitForUri = null;
-      w.reject(new Error('cancelled'));
+      w.reject(new Error("cancelled"));
     }
   }
 
@@ -297,10 +312,10 @@ export class DJ {
     });
 
     if (track.duration_ms <= this.offsetMs + 2000) {
-      return this._advanceAfterFail('track too short', myGen);
+      return this._advanceAfterFail("track too short", myGen);
     }
 
-    this.setState('LOADING_TRACK');
+    this.setState("LOADING_TRACK");
     try {
       await this.player.setVolume(0);
       if (!this._isCurrentGen(myGen)) return;
@@ -313,33 +328,13 @@ export class DJ {
       if (!this._isCurrentGen(myGen)) return;
     } catch (e) {
       if (!this._isCurrentGen(myGen)) return; // superseded — drop the error
-      if (e?.status === 403) {
-        console.warn('Track unavailable (403), skipping:', track.name);
-        return this._advanceAfterFail('403', myGen);
-      }
-      console.warn('play failed, retrying once:', e?.message);
-      try {
-        await new Promise((r) => setTimeout(r, 400));
-        if (!this._isCurrentGen(myGen)) return;
-        await api.play(this.deviceId, track.uri, this.offsetMs);
-        if (!this._isCurrentGen(myGen)) return;
-        await this._waitForTrackLoaded(track.uri);
-        if (!this._isCurrentGen(myGen)) return;
-        await this.player.setVolume(0).catch(() => {});
-        if (!this._isCurrentGen(myGen)) return;
-      } catch (e2) {
-        if (!this._isCurrentGen(myGen)) return;
-        if (e2?.status === 403) {
-          console.warn('Track unavailable (403), skipping:', track.name);
-          return this._advanceAfterFail('403', myGen);
-        }
-        return this._advanceAfterFail(e2?.message || 'play failed', myGen);
-      }
+      console.warn("Track failed, skipping:", track.name, e?.status || "", e?.message || e);
+      return this._advanceAfterFail(e?.message || "play failed", myGen);
     }
 
     if (!this._isCurrentGen(myGen)) return;
     this._consecutiveFails = 0;
-    this.setState('FADING_IN');
+    this.setState("FADING_IN");
     await this.player.setVolume(0).catch(() => {});
     if (!this._isCurrentGen(myGen)) return;
     this._fadeHandle = fadeVolume(this.player, 0, 1, this.fadeMs);
@@ -347,7 +342,7 @@ export class DJ {
     await this._fadeHandle.promise;
     if (!this._isCurrentGen(myGen)) return;
     this._fadeHandle = null;
-    this.setState('PLAYING');
+    this.setState("PLAYING");
     this._scheduleFadeOut();
   }
 
@@ -364,12 +359,12 @@ export class DJ {
 
   async _beginFadeOut() {
     const myGen = this._bumpGen();
-    this.setState('FADING_OUT');
+    this.setState("FADING_OUT");
     this._fadeHandle = fadeVolume(this.player, 1, 0, this.fadeMs);
     await this._fadeHandle.promise;
     this._fadeHandle = null;
     if (!this._isCurrentGen(myGen)) return; // pause/skip/stop happened mid-fade
-    this.setState('SWITCHING');
+    this.setState("SWITCHING");
     this.index += 1;
     if (this.index >= this.tracks.length) {
       if (this.loop) {
